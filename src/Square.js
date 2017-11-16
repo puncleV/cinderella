@@ -7,9 +7,7 @@ const defaultVertices = [
 ]
 export default class Square extends Polygon {
   constructor (webGl, vertices) {
-    super(webGl)
-    this.vertices = vertices || defaultVertices
-    super.bufferData()
+    super(webGl, vertices || defaultVertices)
     this.positionBuffer.itemSize = 3
     this.positionBuffer.numItems = 4
   }
