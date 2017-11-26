@@ -34,6 +34,7 @@ export default class WebGl {
       this.initTexture(() => {
         this.loadWorld((worldText) => {
           this.worldVertices = this.handleLoadedWorld(worldText)
+          this.getWalls(this.worldVertices)
           this.webGl.enable(this.webGl.DEPTH_TEST)
           this.drawScene()
           this.tick()
@@ -88,6 +89,63 @@ export default class WebGl {
     this.webGl.drawArrays(this.webGl[arrayType], 0, vertexPositionBuffer.numItems)
   }
 
+  getWalls (worldVertices) {
+    worldVertices.forEach( triangleVertices => {
+      let verticesMap = {}
+      let positionVertices = triangleVertices.vertices.slice()
+      let normalizedTriangleVertices = []
+      normalizedTriangleVertices.push(positionVertices.splice(0, 3))
+      normalizedTriangleVertices.push(positionVertices.splice(0, 3))
+      normalizedTriangleVertices.push(positionVertices)
+
+      normalizedTriangleVertices.forEach(vertices => {
+        if (verticesMap[vertices[1]]) {
+          verticesMap[vertices[1]].push(vertices)
+        } else {
+          verticesMap[vertices[1]] = [vertices]
+        }
+      })
+
+      for (let yPos in verticesMap) {
+        if (verticesMap[yPos].length === 2) {
+          let xWall = parseFloat(verticesMap[yPos][0][0]) - parseFloat(verticesMap[yPos][1][0])
+          if (xWall) {
+            this.walls.x.push((x, z) => {
+              let x0 = parseFloat(verticesMap[yPos][0][0])
+              let x1 = parseFloat(verticesMap[yPos][1][0])
+              let z0 = parseFloat(verticesMap[yPos][0][2])
+              let distance = Math.abs(z0 - z)
+
+              if (x0 > x1) {
+                distance = (x > x0 || x < x1) ? null : distance
+              } else {
+                distance = (x < x0 || x > x1) ? null : distance
+              }
+
+              return distance
+            })
+          } else {
+            this.walls.z.push((x, z) => {
+              let x0 = parseFloat(verticesMap[yPos][0][0])
+              let z0 = parseFloat(verticesMap[yPos][0][2])
+              let z1 = parseFloat(verticesMap[yPos][1][2])
+              let distance = Math.abs(x0 - x)
+
+              if (z0 > z1) {
+                distance = (z > z0 || z < z1) ? null : distance
+              } else {
+                distance = (z < z0 || z > z1) ? null : distance
+              }
+
+              return distance
+            })
+          }
+
+        }
+      }
+    })
+  }
+
   animate () {
     const timeNow = new Date().getTime()
     if (this.lastTime !== 0) {
@@ -98,22 +156,15 @@ export default class WebGl {
         const dZ = Math.cos(this.degToRad(this.yaw)) * this.speed * elapsed
         const newX = this.xPos - dX
         const newZ = this.zPos - dZ
-        let xCorrect = !this.walls.x.some((xCoord, i) => {
-          const zCoord = this.walls.z[i]
-          const xPassed = (Math.abs(parseFloat(xCoord) - newX) < 0.1)
-          const zPassed = (Math.abs(parseFloat(zCoord) - newZ) < 0.1)
-          return xPassed && zPassed
-        })
-        // let zCorrect = !this.walls.z.some(zCoord => )
-        // console.log(this.xPosd)
-        if (xCorrect) {
+
+        let zCollision = this.walls.x.some(straightFn => straightFn(newX, newZ) !== null && straightFn(newX, newZ) < 0.2)
+        let xCollision = this.walls.z.some(straightFn => straightFn(newX, newZ) !== null && straightFn(newX, newZ) < 0.2)
+        if (!xCollision){
           this.xPos = newX
+        }
+        if (!zCollision) {
           this.zPos = newZ
         }
-
-        // if (zCorrect) {
-        // }
-
         this.joggingAngle += elapsed * 0.6
         this.yPos = Math.sin(this.degToRad(this.joggingAngle)) / 20 + 0.4
       }
@@ -144,14 +195,7 @@ export default class WebGl {
         const vertices = line.splice(0, 3)
         verticesBuf = verticesBuf.concat(vertices)
         textureVerticesBuf = textureVerticesBuf.concat(line)
-        // if (this.walls.x.indexOf(vertices[0]) === -1) {
-          this.walls.x.push(vertices[0])
-        // }
-        // if (this.walls.z.indexOf(vertices[2]) === -1) {
-          this.walls.z.push(vertices[2])
-        // }
       })
-    console.log(this.walls)
     return normalizedTriangles
   }
 
