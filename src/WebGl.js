@@ -1,16 +1,17 @@
 import Triangle from './Triangle'
 // import mat4 from 'gl-matrix'
 import Square from './Square'
+
+const objects = ['maze', '228']
 export default class WebGl {
   constructor () {
     this.canvas = null
     this.webGl = null
     this.shaderProgram = null
-    this.mvMatrix = mat4.create()
+    // this.mvMatrix = mat4.create()
     this.pMatrix = mat4.create()
-    this.mvMatrixStack = []
     this.worldVertices = []
-
+    this.displayedObjects = {}
     this.walls = {
       x: [],
       z: []
@@ -31,19 +32,29 @@ export default class WebGl {
     try {
       this.initGl()
       this.initShaders()
-      this.initTexture(() => {
-        this.loadWorld((worldText) => {
-          this.worldVertices = this.handleLoadedWorld(worldText)
-          this.getWalls(this.worldVertices)
-          this.webGl.enable(this.webGl.DEPTH_TEST)
-          this.drawScene()
-          this.tick()
-          console.info('SUCCESS: webGl initialized!')
-        })
-      })
+      this.webGl.enable(this.webGl.DEPTH_TEST)
+      console.info('SUCCESS: webGl initialized!')
+      this.initWorld()
     } catch (error) {
       console.error(error)
     }
+  }
+  async initWorld () {
+    await this.initTexture()
+    let allVertices = []
+
+    for (let objectName of objects) {
+      const objectText = await this.loadObject(objectName)
+      const objectVertices = this.objectTextToVertices(objectText)
+      this.displayedObjects[objectName] = {
+        mvMatrix: mat4.create(),
+        vertices: objectVertices
+      }
+      allVertices = allVertices.concat(objectVertices)
+    }
+
+    this.getWalls(allVertices)
+    this.tick()
   }
   initGl () {
     this.canvas = document.getElementById('glcanvas')
@@ -65,27 +76,39 @@ export default class WebGl {
     this.webGl.clear(this.webGl.COLOR_BUFFER_BIT | this.webGl.DEPTH_BUFFER_BIT)
 
     mat4.perspective(90, this.webGl.viewportWidth / this.webGl.viewportHeigth, 0.1, 100.0, this.pMatrix)
-    mat4.identity(this.mvMatrix)
 
-    mat4.rotate(this.mvMatrix, this.degToRad(-this.pitch), [1, 0, 0])
-    mat4.rotate(this.mvMatrix, this.degToRad(-this.yaw), [0, 1, 0])
-    mat4.translate(this.mvMatrix, [-this.xPos, -this.yPos, -this.zPos])
+    for (let objectName in this.displayedObjects) {
+      this.drawSomeBitch(this.displayedObjects[objectName])
+    }
+  }
+  // todo rename this bitch
+  drawSomeBitch (bitch) {
+    const mvMatrix = bitch.mvMatrix
+    this.setMatrix(mvMatrix)
 
     this.webGl.activeTexture(this.webGl.TEXTURE0)
     this.webGl.bindTexture(this.webGl.TEXTURE_2D, this.mainTexture)
     this.webGl.uniform1i(this.shaderProgram.samplerUniform, 0)
-    this.worldVertices.forEach(triangleVertices => {
+
+    bitch.vertices.forEach(triangleVertices => {
       let triangle = new Triangle(this.webGl, triangleVertices.vertices, triangleVertices.textureVertices)
       this.webGl.bindBuffer(this.webGl.ARRAY_BUFFER, triangle.getTextureCoordsBuffer())
       this.webGl.vertexAttribPointer(this.shaderProgram.textureCoordAttribute, triangle.getTextureCoordsBuffer().itemSize, this.webGl.FLOAT, false, 0, 0)
-      this.bindAndDrawArray('TRIANGLES', triangle.getPositionBuffer())
+      this.bindAndDrawArray('TRIANGLES', triangle.getPositionBuffer(), mvMatrix)
     })
   }
 
-  bindAndDrawArray (arrayType, vertexPositionBuffer) {
+  setMatrix (matrix) {
+    mat4.identity(matrix)
+    mat4.rotate(matrix, this.degToRad(-this.pitch), [1, 0, 0])
+    mat4.rotate(matrix, this.degToRad(-this.yaw), [0, 1, 0])
+    mat4.translate(matrix, [-this.xPos, -this.yPos, -this.zPos])
+  }
+
+  bindAndDrawArray (arrayType, vertexPositionBuffer, mvMatrix) {
     this.webGl.bindBuffer(this.webGl.ARRAY_BUFFER, vertexPositionBuffer)
     this.webGl.vertexAttribPointer(this.shaderProgram.vertexPositionAttribute, vertexPositionBuffer.itemSize, this.webGl.FLOAT, false, 0, 0)
-    this.setMatrixUniform()
+    this.setMatrixUniform(mvMatrix)
     this.webGl.drawArrays(this.webGl[arrayType], 0, vertexPositionBuffer.numItems)
   }
 
@@ -117,9 +140,9 @@ export default class WebGl {
               let distance = Math.abs(z0 - z)
 
               if (x0 > x1) {
-                distance = (x > x0 || x < x1) ? null : distance
+                distance = (x - 0.1 > x0 || x - 0.1 < x1) ? null : distance
               } else {
-                distance = (x < x0 || x > x1) ? null : distance
+                distance = (x - 0.1 < x0 || x - 0.1 > x1) ? null : distance
               }
 
               return distance
@@ -132,9 +155,9 @@ export default class WebGl {
               let distance = Math.abs(x0 - x)
 
               if (z0 > z1) {
-                distance = (z > z0 || z < z1) ? null : distance
+                distance = (z - 0.1 > z0 || z - 0.1 < z1) ? null : distance
               } else {
-                distance = (z < z0 || z > z1) ? null : distance
+                distance = (z - 0.1 < z0 || z - 0.1 > z1) ? null : distance
               }
 
               return distance
@@ -150,6 +173,8 @@ export default class WebGl {
     const timeNow = new Date().getTime()
     if (this.lastTime !== 0) {
       const elapsed = timeNow - this.lastTime
+      const newPitch = this.pitch + this.pitchRate * elapsed
+
 
       if (this.speed !== 0) {
         const dX = Math.sin(this.degToRad(this.yaw)) * this.speed * elapsed
@@ -170,16 +195,17 @@ export default class WebGl {
       }
 
       this.yaw += this.yawRate * elapsed
-      this.pitch += this.pitchRate * elapsed
+
+      this.pitch = Math.abs(newPitch) <= 90 ? newPitch : this.pitch
     }
     this.lastTime = timeNow
   }
 
-  handleLoadedWorld (worldText) {
+  objectTextToVertices (objectText) {
     let normalizedTriangles = []
     let verticesBuf = []
     let textureVerticesBuf = []
-    worldText.split('\n').filter(line => line.indexOf('//') === -1)
+    objectText.split('\n').filter(line => line.indexOf('//') === -1)
       .map(line => line.split(/\s+/).filter(value => value !== ''))
       .filter(line => line.length === 5)
       .forEach((line, i) => {
@@ -199,15 +225,16 @@ export default class WebGl {
     return normalizedTriangles
   }
 
-  initTexture (callback) {
-    this.mainTexture = this.webGl.createTexture()
-    this.mainTexture.image = new Image()
-    this.mainTexture.image.onload = () => {
-      this.handleLoadedTexture(this.mainTexture)
-      callback()
-    }
-
-    this.mainTexture.image.src = 'mud.gif'
+  initTexture () {
+    return new Promise(resolve => {
+      this.mainTexture = this.webGl.createTexture()
+      this.mainTexture.image = new Image()
+      this.mainTexture.image.onload = () => {
+        this.handleLoadedTexture(this.mainTexture)
+        resolve()
+      }
+      this.mainTexture.image.src = 'mud.gif'
+    })
   }
 
   handleLoadedTexture (texture) {
@@ -220,9 +247,9 @@ export default class WebGl {
     this.webGl.bindTexture(this.webGl.TEXTURE_2D, null)
   }
 
-  setMatrixUniform () {
+  setMatrixUniform (mvMatrix) {
     this.webGl.uniformMatrix4fv(this.shaderProgram.pMatrixUniform, false, this.pMatrix)
-    this.webGl.uniformMatrix4fv(this.shaderProgram.mvMatrixUniform, false, this.mvMatrix)
+    this.webGl.uniformMatrix4fv(this.shaderProgram.mvMatrixUniform, false, mvMatrix)
   }
   getShader (gl, id) {
     let shaderScript = document.getElementById(id)
@@ -257,17 +284,30 @@ export default class WebGl {
     return shader
   }
 
-  loadWorld (callback) {
-    let request = new XMLHttpRequest()
-    request.open('GET', 'world.txt')
-    request.onreadystatechange = function () {
-      if (request.readyState === 4) {
-        // handleLoadedWorld(request.responseText)
-        callback(request.responseText)
+  loadObject (objectName) {
+    return new Promise(resolve => {
+      let request = new XMLHttpRequest()
+      request.open('GET', `objects/${objectName}.txt`)
+      request.onreadystatechange = function () {
+        if (request.readyState === 4) {
+          resolve(request.responseText)
+        }
       }
-    }
-    request.send()
+      request.send()
+    })
   }
+
+  // loadObjects (callback) {
+  //   let request = new XMLHttpRequest()
+  //   request.open('GET', 'objects/maze.txt')
+  //   request.onreadystatechange = function () {
+  //     if (request.readyState === 4) {
+  //       // handleLoadedWorld(request.responseText)
+  //       callback(request.responseText)
+  //     }
+  //   }
+  //   request.send()
+  // }
 
   initShaders () {
     let fragmentShader = this.getShader(this.webGl, 'shader-fs')
