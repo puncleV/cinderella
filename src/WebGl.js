@@ -2,7 +2,13 @@ import Triangle from './Triangle'
 // import mat4 from 'gl-matrix'
 import Square from './Square'
 
-const objects = ['maze', '228']
+const objects = [{
+  name: 'maze',
+  textureName: 'mud.gif'
+},{
+  name: '228',
+  textureName: 'blood.png'
+}]
 export default class WebGl {
   constructor () {
     this.canvas = null
@@ -40,15 +46,16 @@ export default class WebGl {
     }
   }
   async initWorld () {
-    await this.initTexture()
     let allVertices = []
 
-    for (let objectName of objects) {
-      const objectText = await this.loadObject(objectName)
+    for (let i in objects) {
+      const objectText = await this.loadObject(objects[i].name)
       const objectVertices = this.objectTextToVertices(objectText)
-      this.displayedObjects[objectName] = {
+      let texture = await this.initTexture(objects[i].textureName)
+      this.displayedObjects[objects[i].name] = {
         mvMatrix: mat4.create(),
-        vertices: objectVertices
+        vertices: objectVertices,
+        texture
       }
       allVertices = allVertices.concat(objectVertices)
     }
@@ -78,6 +85,9 @@ export default class WebGl {
     mat4.perspective(90, this.webGl.viewportWidth / this.webGl.viewportHeigth, 0.1, 100.0, this.pMatrix)
 
     for (let objectName in this.displayedObjects) {
+      this.webGl.activeTexture(this.webGl.TEXTURE0)
+      this.webGl.bindTexture(this.webGl.TEXTURE_2D, this.displayedObjects[objectName].texture)
+      this.webGl.uniform1i(this.shaderProgram.samplerUniform, 0)
       this.drawSomeBitch(this.displayedObjects[objectName])
     }
   }
@@ -86,9 +96,9 @@ export default class WebGl {
     const mvMatrix = bitch.mvMatrix
     this.setMatrix(mvMatrix)
 
-    this.webGl.activeTexture(this.webGl.TEXTURE0)
-    this.webGl.bindTexture(this.webGl.TEXTURE_2D, this.mainTexture)
-    this.webGl.uniform1i(this.shaderProgram.samplerUniform, 0)
+    // this.webGl.activeTexture(this.webGl.TEXTURE0)
+    // this.webGl.bindTexture(this.webGl.TEXTURE_2D, this.mainTexture)
+    // this.webGl.uniform1i(this.shaderProgram.samplerUniform, 0)
 
     bitch.vertices.forEach(triangleVertices => {
       let triangle = new Triangle(this.webGl, triangleVertices.vertices, triangleVertices.textureVertices)
@@ -225,15 +235,15 @@ export default class WebGl {
     return normalizedTriangles
   }
 
-  initTexture () {
+  initTexture (textureName) {
     return new Promise(resolve => {
-      this.mainTexture = this.webGl.createTexture()
-      this.mainTexture.image = new Image()
-      this.mainTexture.image.onload = () => {
-        this.handleLoadedTexture(this.mainTexture)
-        resolve()
+      let texture = this.webGl.createTexture()
+      texture.image = new Image()
+      texture.image.src = textureName
+      texture.image.onload = () => {
+        this.handleLoadedTexture(texture)
+        resolve(texture)
       }
-      this.mainTexture.image.src = 'mud.gif'
     })
   }
 
