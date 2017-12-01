@@ -9,6 +9,9 @@ const objects = [{
   name: '228',
   textureName: 'blood.png'
 }]
+const wallMargin = 0.1
+const collisionMargin = 0.2
+
 export default class WebGl {
   constructor () {
     this.canvas = null
@@ -150,9 +153,9 @@ export default class WebGl {
               let distance = Math.abs(z0 - z)
 
               if (x0 > x1) {
-                distance = (x - 0.1 > x0 || x - 0.1 < x1) ? null : distance
+                distance = (x - wallMargin > x0 || x + wallMargin < x1) ? null : distance
               } else {
-                distance = (x - 0.1 < x0 || x - 0.1 > x1) ? null : distance
+                distance = (x + wallMargin < x0 || x - wallMargin > x1) ? null : distance
               }
 
               return distance
@@ -165,9 +168,9 @@ export default class WebGl {
               let distance = Math.abs(x0 - x)
 
               if (z0 > z1) {
-                distance = (z - 0.1 > z0 || z - 0.1 < z1) ? null : distance
+                distance = (z - wallMargin > z0 || z + wallMargin < z1) ? null : distance
               } else {
-                distance = (z - 0.1 < z0 || z - 0.1 > z1) ? null : distance
+                distance = (z + wallMargin < z0 || z - wallMargin > z1) ? null : distance
               }
 
               return distance
@@ -192,8 +195,8 @@ export default class WebGl {
         const newX = this.xPos - dX
         const newZ = this.zPos - dZ
 
-        let zCollision = this.walls.x.some(straightFn => straightFn(newX, newZ) !== null && straightFn(newX, newZ) < 0.2)
-        let xCollision = this.walls.z.some(straightFn => straightFn(newX, newZ) !== null && straightFn(newX, newZ) < 0.2)
+        let zCollision = this.walls.x.some(straightFn => straightFn(newX, newZ) !== null && straightFn(newX, newZ) < collisionMargin)
+        let xCollision = this.walls.z.some(straightFn => straightFn(newX, newZ) !== null && straightFn(newX, newZ) < collisionMargin)
         if (!xCollision){
           this.xPos = newX
         }
