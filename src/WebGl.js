@@ -3,11 +3,20 @@ import Triangle from './Triangle'
 import Square from './Square'
 
 const objects = [{
-  name: 'maze',
-  textureName: 'mud.gif'
-},{
-  name: '228',
-  textureName: 'blood.png'
+  name: 'cube_first',
+  textureName: './cube_first.gif'
+}, {
+  name: 'cube_sec',
+  textureName: './cube_sec.gif'
+}, {
+  name: 'wallpaper',
+  textureName: './wallpaper.gif'
+}, {
+  name: 'ceiling',
+  textureName: './ceiling.gif'
+}, {
+  name: 'floor',
+  textureName: './floor.gif'
 }]
 const wallMargin = 0.1
 const collisionMargin = 0.2
@@ -312,7 +321,7 @@ export default class WebGl {
 
   // loadObjects (callback) {
   //   let request = new XMLHttpRequest()
-  //   request.open('GET', 'objects/maze.txt')
+  //   request.open('GET', 'objects/wallpaper.txt')
   //   request.onreadystatechange = function () {
   //     if (request.readyState === 4) {
   //       // handleLoadedWorld(request.responseText)
