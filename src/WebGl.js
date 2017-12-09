@@ -43,6 +43,8 @@ export default class WebGl {
     this.xPos = 4.7
     this.yPos = 0.4
     this.zPos = 2.43
+    this.rCubeFirst = 0
+    this.rCubeSec = 0
     this.speed = 0
     this.lastTime = 0
     this.joggingAngle = 0
@@ -106,7 +108,13 @@ export default class WebGl {
   // todo rename this bitch
   drawSomeBitch (bitch) {
     const mvMatrix = bitch.mvMatrix
-    this.setMatrix(mvMatrix)
+    if (bitch === this.displayedObjects['cube_first']) {
+      this.setMatrix2(mvMatrix)
+    } else if (bitch === this.displayedObjects['cube_sec']) {
+      this.setMatrix3(mvMatrix)
+    } else {
+      this.setMatrix(mvMatrix)
+    }
 
     // this.webGl.activeTexture(this.webGl.TEXTURE0)
     // this.webGl.bindTexture(this.webGl.TEXTURE_2D, this.mainTexture)
@@ -118,6 +126,24 @@ export default class WebGl {
       this.webGl.vertexAttribPointer(this.shaderProgram.textureCoordAttribute, triangle.getTextureCoordsBuffer().itemSize, this.webGl.FLOAT, false, 0, 0)
       this.bindAndDrawArray('TRIANGLES', triangle.getPositionBuffer(), mvMatrix)
     })
+  }
+
+  setMatrix2 (matrix) {
+    mat4.identity(matrix)
+    mat4.rotate(matrix, this.degToRad(-this.pitch), [1, 0, 0])
+    mat4.rotate(matrix, this.degToRad(-this.yaw), [0, 1, 0])
+    mat4.translate(matrix, [2.5, 0.5, 1.5])
+    mat4.translate(matrix, [-this.xPos, -this.yPos, -this.zPos])
+    mat4.rotate(matrix, this.degToRad(this.rCubeFirst), [0, 0, 1])
+  }
+
+  setMatrix3 (matrix) {
+    mat4.identity(matrix)
+    mat4.rotate(matrix, this.degToRad(-this.pitch), [1, 0, 0])
+    mat4.rotate(matrix, this.degToRad(-this.yaw), [0, 1, 0])
+    mat4.translate(matrix, [-0.5, 0.5, 1.5])
+    mat4.translate(matrix, [-this.xPos, -this.yPos, -this.zPos])
+    mat4.rotate(matrix, this.degToRad(this.rCubeSec), [1, 0, 0])
   }
 
   setMatrix (matrix) {
@@ -196,7 +222,8 @@ export default class WebGl {
     if (this.lastTime !== 0) {
       const elapsed = timeNow - this.lastTime
       const newPitch = this.pitch + this.pitchRate * elapsed
-
+      this.rCubeFirst += (75 * elapsed) / 1000
+      this.rCubeSec += (75 * elapsed) / 1000
 
       if (this.speed !== 0) {
         const dX = Math.sin(this.degToRad(this.yaw)) * this.speed * elapsed
