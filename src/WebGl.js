@@ -17,7 +17,11 @@ const objects = [{
 }, {
   name: 'floor',
   textureName: './floor.gif'
-}]
+}//, {
+ // name: 'light1',
+ // textureName: './light.gif'
+//}
+]
 const wallMargin = 0.1
 const collisionMargin = 0.2
 
@@ -25,16 +29,66 @@ export default class WebGl {
   constructor () {
     this.canvas = null
     this.webGl = null
-    this.shaderProgram = null
-    // this.mvMatrix = mat4.create()
+    this.worldSpaceLight = null
+    //this.shaderProgram = null
+    this.perVertexProgram = null
+    this.perFragmentProgram = null
+    this.currentProgram = null
     this.pMatrix = mat4.create()
+    this.normalMatrix = mat3.create()
     this.worldVertices = []
     this.displayedObjects = {}
     this.walls = {
       x: [],
       z: []
     }
+    this.cubeVertexNormalBuffer = null
+    this.cubeVertexIndexBuffer = null
+    this.vertexNormals = [
+      // Front face
+      0.0, 0.0, 1.0,
+      0.0, 0.0, 1.0,
+      0.0, 0.0, 1.0,
+      0.0, 0.0, 1.0,
 
+      // Back face
+      0.0, 0.0, -1.0,
+      0.0, 0.0, -1.0,
+      0.0, 0.0, -1.0,
+      0.0, 0.0, -1.0,
+
+      // Top face
+      0.0, 1.0, 0.0,
+      0.0, 1.0, 0.0,
+      0.0, 1.0, 0.0,
+      0.0, 1.0, 0.0,
+
+      // Bottom face
+      0.0, -1.0, 0.0,
+      0.0, -1.0, 0.0,
+      0.0, -1.0, 0.0,
+      0.0, -1.0, 0.0,
+
+      // Right face
+      1.0, 0.0, 0.0,
+      1.0, 0.0, 0.0,
+      1.0, 0.0, 0.0,
+      1.0, 0.0, 0.0,
+
+      // Left face
+      -1.0, 0.0, 0.0,
+      -1.0, 0.0, 0.0,
+      -1.0, 0.0, 0.0,
+      -1.0, 0.0, 0.0
+    ]
+    this.cubeVertexIndices = [
+      0, 1, 2, 0, 2, 3,    // Front face
+      4, 5, 6, 4, 6, 7,    // Back face
+      8, 9, 10, 8, 10, 11,  // Top face
+      12, 13, 14, 12, 14, 15, // Bottom face
+      16, 17, 18, 16, 18, 19, // Right face
+      20, 21, 22, 20, 22, 23  // Left face
+    ]
     this.currentlyPressedKeys = {}
     this.pitch = 0
     this.pitchRate = 0
@@ -51,7 +105,8 @@ export default class WebGl {
 
     try {
       this.initGl()
-      this.initShaders()
+      this.perVertexProgram = this.initShaders('per-vertex-lighting-fs', 'per-vertex-lighting-vs')
+      this.perFragmentProgram = this.initShaders('per-fragment-lighting-fs', 'per-fragment-lighting-vs')
       this.webGl.enable(this.webGl.DEPTH_TEST)
       console.info('SUCCESS: webGl initialized!')
       this.initWorld()
@@ -98,11 +153,25 @@ export default class WebGl {
 
     mat4.perspective(90, this.webGl.viewportWidth / this.webGl.viewportHeigth, 0.1, 100.0, this.pMatrix)
 
+    let perFragmentLighting = true
+    if (perFragmentLighting) {
+      this.currentProgram = this.perFragmentProgram
+    } else {
+      this.currentProgram = this.perVertexProgram
+    }
+    this.webGl.useProgram(this.currentProgram)
+
     for (let objectName in this.displayedObjects) {
       this.webGl.activeTexture(this.webGl.TEXTURE0)
       this.webGl.bindTexture(this.webGl.TEXTURE_2D, this.displayedObjects[objectName].texture)
-      this.webGl.uniform1i(this.shaderProgram.samplerUniform, 0)
+      this.webGl.uniform1i(this.currentProgram.samplerUniform, 0)
+
+      this.webGl.uniform1i(this.currentProgram.useLightingUniform, true)
+      this.webGl.uniform3f(this.currentProgram.ambientColorUniform, 0.2, 0.2, 0.2)
+      this.webGl.uniform3f(this.currentProgram.pointLightingLocationUniform, 0, 0, 0)
+      this.webGl.uniform3f(this.currentProgram.pointLightingColorUniform, 1, 1, 1)
       this.drawSomeBitch(this.displayedObjects[objectName])
+      this.webGl.uniform1i(this.currentProgram.useTexturesUniform, true)
     }
   }
   // todo rename this bitch
@@ -112,6 +181,8 @@ export default class WebGl {
       this.setMatrix2(mvMatrix)
     } else if (bitch === this.displayedObjects['cube_sec']) {
       this.setMatrix3(mvMatrix)
+    } else if (bitch === this.displayedObjects['light1']) {
+      this.setMatrixLight(mvMatrix)
     } else {
       this.setMatrix(mvMatrix)
     }
@@ -120,12 +191,39 @@ export default class WebGl {
     // this.webGl.bindTexture(this.webGl.TEXTURE_2D, this.mainTexture)
     // this.webGl.uniform1i(this.shaderProgram.samplerUniform, 0)
 
+    this.initNormalBuffer()
+    this.webGl.bindBuffer(this.webGl.ARRAY_BUFFER, this.cubeVertexNormalBuffer)
+    this.webGl.vertexAttribPointer(this.currentProgram.vertexNormalAttribute, this.cubeVertexNormalBuffer.itemSize, this.webGl.FLOAT, false, 0, 0)
+    // this.initVertexIndexBuffer()
     bitch.vertices.forEach(triangleVertices => {
       let triangle = new Triangle(this.webGl, triangleVertices.vertices, triangleVertices.textureVertices)
       this.webGl.bindBuffer(this.webGl.ARRAY_BUFFER, triangle.getTextureCoordsBuffer())
-      this.webGl.vertexAttribPointer(this.shaderProgram.textureCoordAttribute, triangle.getTextureCoordsBuffer().itemSize, this.webGl.FLOAT, false, 0, 0)
+      this.webGl.vertexAttribPointer(this.currentProgram.textureCoordAttribute, triangle.getTextureCoordsBuffer().itemSize, this.webGl.FLOAT, false, 0, 0)
       this.bindAndDrawArray('TRIANGLES', triangle.getPositionBuffer(), mvMatrix)
     })
+  }
+
+  initNormalBuffer () {
+    this.cubeVertexNormalBuffer = this.webGl.createBuffer()
+    this.webGl.bindBuffer(this.webGl.ARRAY_BUFFER, this.cubeVertexNormalBuffer)
+    this.webGl.bufferData(this.webGl.ARRAY_BUFFER, new Float32Array(this.vertexNormals), this.webGl.STATIC_DRAW)
+    this.cubeVertexNormalBuffer.itemSize = 3
+    this.cubeVertexNormalBuffer.numItems = 24
+  }
+
+  // initVertexIndexBuffer () {
+  //   this.cubeVertexIndexBuffer = this.webGl.createBuffer()
+  //   this.webGl.bindBuffer(this.webGl.ELEMENT_ARRAY_BUFFER, this.cubeVertexIndexBuffer)
+  //   this.webGl.bufferData(this.webGl.ELEMENT_ARRAY_BUFFER, new Uint16Array(this.cubeVertexIndices), this.webGl.STATIC_DRAW)
+  //   this.cubeVertexIndexBuffer.itemSize = 1
+  //   this.cubeVertexIndexBuffer.numItems = 36
+  // }
+
+  setMatrix (matrix) {
+    mat4.identity(matrix)
+    mat4.rotate(matrix, this.degToRad(-this.pitch), [1, 0, 0])
+    mat4.rotate(matrix, this.degToRad(-this.yaw), [0, 1, 0])
+    mat4.translate(matrix, [-this.xPos, -this.yPos, -this.zPos])
   }
 
   setMatrix2 (matrix) {
@@ -146,16 +244,17 @@ export default class WebGl {
     mat4.rotate(matrix, this.degToRad(this.rCubeSec), [1, 0, 0])
   }
 
-  setMatrix (matrix) {
+  setMatrixLight (matrix) {
     mat4.identity(matrix)
     mat4.rotate(matrix, this.degToRad(-this.pitch), [1, 0, 0])
     mat4.rotate(matrix, this.degToRad(-this.yaw), [0, 1, 0])
+    mat4.translate(matrix, [-1.05, 0.95, 1.05])
     mat4.translate(matrix, [-this.xPos, -this.yPos, -this.zPos])
   }
 
   bindAndDrawArray (arrayType, vertexPositionBuffer, mvMatrix) {
     this.webGl.bindBuffer(this.webGl.ARRAY_BUFFER, vertexPositionBuffer)
-    this.webGl.vertexAttribPointer(this.shaderProgram.vertexPositionAttribute, vertexPositionBuffer.itemSize, this.webGl.FLOAT, false, 0, 0)
+    this.webGl.vertexAttribPointer(this.currentProgram.vertexPositionAttribute, vertexPositionBuffer.itemSize, this.webGl.FLOAT, false, 0, 0)
     this.setMatrixUniform(mvMatrix)
     this.webGl.drawArrays(this.webGl[arrayType], 0, vertexPositionBuffer.numItems)
   }
@@ -291,14 +390,19 @@ export default class WebGl {
     this.webGl.bindTexture(this.webGl.TEXTURE_2D, texture)
     this.webGl.texImage2D(this.webGl.TEXTURE_2D, 0, this.webGl.RGBA, this.webGl.RGBA, this.webGl.UNSIGNED_BYTE, texture.image)
     this.webGl.texParameteri(this.webGl.TEXTURE_2D, this.webGl.TEXTURE_MAG_FILTER, this.webGl.LINEAR)
-    this.webGl.texParameteri(this.webGl.TEXTURE_2D, this.webGl.TEXTURE_MIN_FILTER, this.webGl.LINEAR)
+    // this.webGl.texParameteri(this.webGl.TEXTURE_2D, this.webGl.TEXTURE_MIN_FILTER, this.webGl.LINEAR)
+    this.webGl.texParameteri(this.webGl.TEXTURE_2D, this.webGl.TEXTURE_MIN_FILTER, this.webGl.LINEAR_MIPMAP_NEAREST)
+    this.webGl.generateMipmap(this.webGl.TEXTURE_2D)
 
     this.webGl.bindTexture(this.webGl.TEXTURE_2D, null)
   }
 
   setMatrixUniform (mvMatrix) {
-    this.webGl.uniformMatrix4fv(this.shaderProgram.pMatrixUniform, false, this.pMatrix)
-    this.webGl.uniformMatrix4fv(this.shaderProgram.mvMatrixUniform, false, mvMatrix)
+    this.webGl.uniformMatrix4fv(this.currentProgram.pMatrixUniform, false, this.pMatrix)
+    this.webGl.uniformMatrix4fv(this.currentProgram.mvMatrixUniform, false, mvMatrix)
+    mat4.toInverseMat3(mvMatrix, this.normalMatrix)
+    mat3.transpose(this.normalMatrix)
+    this.webGl.uniformMatrix3fv(this.currentProgram.nMatrixUniform, false, this.normalMatrix)
   }
   getShader (gl, id) {
     let shaderScript = document.getElementById(id)
@@ -358,31 +462,41 @@ export default class WebGl {
   //   request.send()
   // }
 
-  initShaders () {
-    let fragmentShader = this.getShader(this.webGl, 'shader-fs')
-    let vertexShader = this.getShader(this.webGl, 'shader-vs')
+  initShaders (fragmentShaderID, vertexShaderID) {
+    let fragmentShader = this.getShader(this.webGl, fragmentShaderID)
+    let vertexShader = this.getShader(this.webGl, vertexShaderID)
     // let shaderProgram = this.shaderProgram
 
-    this.shaderProgram = this.webGl.createProgram()
-    this.webGl.attachShader(this.shaderProgram, vertexShader)
-    this.webGl.attachShader(this.shaderProgram, fragmentShader)
-    this.webGl.linkProgram(this.shaderProgram)
+    let shaderProgram = this.webGl.createProgram()
+    this.webGl.attachShader(shaderProgram, vertexShader)
+    this.webGl.attachShader(shaderProgram, fragmentShader)
+    this.webGl.linkProgram(shaderProgram)
 
-    if (!this.webGl.getProgramParameter(this.shaderProgram, this.webGl.LINK_STATUS)) {
+    if (!this.webGl.getProgramParameter(shaderProgram, this.webGl.LINK_STATUS)) {
       throw new Error('could not initialize shaders')
     }
 
-    this.webGl.useProgram(this.shaderProgram)
+    this.webGl.useProgram(shaderProgram)
 
-    this.shaderProgram.vertexPositionAttribute = this.webGl.getAttribLocation(this.shaderProgram, 'aVertexPosition')
-    this.webGl.enableVertexAttribArray(this.shaderProgram.vertexPositionAttribute)
+    shaderProgram.vertexPositionAttribute = this.webGl.getAttribLocation(shaderProgram, 'aVertexPosition')
+    this.webGl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute)
 
-    this.shaderProgram.textureCoordAttribute = this.webGl.getAttribLocation(this.shaderProgram, 'aTextureCoord')
-    this.webGl.enableVertexAttribArray(this.shaderProgram.textureCoordAttribute)
+    shaderProgram.vertexNormalAttribute = this.webGl.getAttribLocation(shaderProgram, 'aVertexNormal')
+    this.webGl.enableVertexAttribArray(shaderProgram.vertexNormalAttribute)
 
-    this.shaderProgram.pMatrixUniform = this.webGl.getUniformLocation(this.shaderProgram, 'uPMatrix')
-    this.shaderProgram.mvMatrixUniform = this.webGl.getUniformLocation(this.shaderProgram, 'uMVMatrix')
-    this.shaderProgram.samplerUniform = this.webGl.getUniformLocation(this.shaderProgram, 'uSampler')
+    shaderProgram.textureCoordAttribute = this.webGl.getAttribLocation(shaderProgram, 'aTextureCoord')
+    this.webGl.enableVertexAttribArray(shaderProgram.textureCoordAttribute)
+
+    shaderProgram.pMatrixUniform = this.webGl.getUniformLocation(shaderProgram, 'uPMatrix')
+    shaderProgram.mvMatrixUniform = this.webGl.getUniformLocation(shaderProgram, 'uMVMatrix')
+    shaderProgram.nMatrixUniform = this.webGl.getUniformLocation(shaderProgram, 'uNMatrix')
+    shaderProgram.samplerUniform = this.webGl.getUniformLocation(shaderProgram, 'uSampler')
+    shaderProgram.useTexturesUniform = this.webGl.getUniformLocation(shaderProgram, 'uUseTextures')
+    shaderProgram.useLightingUniform = this.webGl.getUniformLocation(shaderProgram, 'uUseLighting')
+    shaderProgram.ambientColorUniform = this.webGl.getUniformLocation(shaderProgram, 'uAmbientColor')
+    shaderProgram.pointLightingLocationUniform = this.webGl.getUniformLocation(shaderProgram, 'uPointLightingLocation')
+    shaderProgram.pointLightingColorUniform = this.webGl.getUniformLocation(shaderProgram, 'uPointLightingColor')
+    return shaderProgram
   }
   tick () {
     requestAnimFrame(this.tick.bind(this))
