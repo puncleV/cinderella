@@ -17,20 +17,16 @@ const objects = [{
 }, {
   name: 'floor',
   textureName: './floor.gif'
-}//, {
- // name: 'light1',
- // textureName: './light.gif'
-//}
-]
+}]
 const wallMargin = 0.1
 const collisionMargin = 0.2
 
 export default class WebGl {
   constructor () {
+    this.elapsed = null
     this.canvas = null
     this.webGl = null
     this.worldSpaceLight = null
-    //this.shaderProgram = null
     this.perVertexProgram = null
     this.perFragmentProgram = null
     this.currentProgram = null
@@ -121,11 +117,13 @@ export default class WebGl {
       const objectText = await this.loadObject(objects[i].name)
       const objectVertices = this.objectTextToVertices(objectText)
       let texture = await this.initTexture(objects[i].textureName)
-      this.displayedObjects[objects[i].name] = {
-        mvMatrix: mat4.create(),
-        vertices: objectVertices,
-        texture
-      }
+
+        this.displayedObjects[objects[i].name] = {
+          mvMatrix: mat4.create(),
+          vertices: objectVertices,
+          texture
+        }
+
       allVertices = allVertices.concat(objectVertices)
     }
 
@@ -167,9 +165,9 @@ export default class WebGl {
       this.webGl.uniform1i(this.currentProgram.samplerUniform, 0)
 
       this.webGl.uniform1i(this.currentProgram.useLightingUniform, true)
-      this.webGl.uniform3f(this.currentProgram.ambientColorUniform, 0.2, 0.2, 0.2)
-      this.webGl.uniform3f(this.currentProgram.pointLightingLocationUniform, 0, 0, 0)
-      this.webGl.uniform3f(this.currentProgram.pointLightingColorUniform, 1, 1, 1)
+      this.webGl.uniform3f(this.currentProgram.ambientColorUniform, 0.1, 0.1, 0.1)
+      this.webGl.uniform3f(this.currentProgram.pointLightingLocationUniform, -1, 1, 1)
+      this.webGl.uniform3f(this.currentProgram.pointLightingColorUniform, 0.9, 0.9, 0.9)
       this.drawSomeBitch(this.displayedObjects[objectName])
       this.webGl.uniform1i(this.currentProgram.useTexturesUniform, true)
     }
@@ -244,14 +242,6 @@ export default class WebGl {
     mat4.rotate(matrix, this.degToRad(this.rCubeSec), [1, 0, 0])
   }
 
-  setMatrixLight (matrix) {
-    mat4.identity(matrix)
-    mat4.rotate(matrix, this.degToRad(-this.pitch), [1, 0, 0])
-    mat4.rotate(matrix, this.degToRad(-this.yaw), [0, 1, 0])
-    mat4.translate(matrix, [-1.05, 0.95, 1.05])
-    mat4.translate(matrix, [-this.xPos, -this.yPos, -this.zPos])
-  }
-
   bindAndDrawArray (arrayType, vertexPositionBuffer, mvMatrix) {
     this.webGl.bindBuffer(this.webGl.ARRAY_BUFFER, vertexPositionBuffer)
     this.webGl.vertexAttribPointer(this.currentProgram.vertexPositionAttribute, vertexPositionBuffer.itemSize, this.webGl.FLOAT, false, 0, 0)
@@ -319,14 +309,14 @@ export default class WebGl {
   animate () {
     const timeNow = new Date().getTime()
     if (this.lastTime !== 0) {
-      const elapsed = timeNow - this.lastTime
-      const newPitch = this.pitch + this.pitchRate * elapsed
-      this.rCubeFirst += (75 * elapsed) / 1000
-      this.rCubeSec += (75 * elapsed) / 1000
+      this.elapsed = timeNow - this.lastTime
+      const newPitch = this.pitch + this.pitchRate * this.elapsed
+      this.rCubeFirst += (75 * this.elapsed) / 1000
+      this.rCubeSec += (75 * this.elapsed) / 1000
 
       if (this.speed !== 0) {
-        const dX = Math.sin(this.degToRad(this.yaw)) * this.speed * elapsed
-        const dZ = Math.cos(this.degToRad(this.yaw)) * this.speed * elapsed
+        const dX = Math.sin(this.degToRad(this.yaw)) * this.speed * this.elapsed
+        const dZ = Math.cos(this.degToRad(this.yaw)) * this.speed * this.elapsed
         const newX = this.xPos - dX
         const newZ = this.zPos - dZ
 
@@ -338,11 +328,11 @@ export default class WebGl {
         if (!zCollision) {
           this.zPos = newZ
         }
-        this.joggingAngle += elapsed * 0.6
+        this.joggingAngle += this.elapsed * 0.6
         this.yPos = Math.sin(this.degToRad(this.joggingAngle)) / 20 + 0.4
       }
 
-      this.yaw += this.yawRate * elapsed
+      this.yaw += this.yawRate * this.elapsed
 
       this.pitch = Math.abs(newPitch) <= 90 ? newPitch : this.pitch
     }
