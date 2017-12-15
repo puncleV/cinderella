@@ -4,19 +4,23 @@ import Square from './Square'
 
 const objects = [{
   name: 'cube_first',
-  textureName: './cube_first.gif'
+  textureName: ['./cube_first.gif']
 }, {
   name: 'cube_sec',
-  textureName: './cube_sec.gif'
+  textureName: ['./cube_sec.gif']
 }, {
   name: 'wallpaper',
-  textureName: './wallpaper.gif'
+  textureName: ['./wallpaper.gif']
 }, {
   name: 'ceiling',
-  textureName: './ceiling.gif'
+  textureName: ['./ceiling.gif']
 }, {
   name: 'floor',
-  textureName: './floor.gif'
+  textureName: ['./floor.gif']
+},
+{
+  name: 'new_cube',
+  textureName: ['./textures/ceilwing.gif', './textures/wallpaperrr.gif']
 }]
 const wallMargin = 0.1
 const collisionMargin = 0.2
@@ -116,13 +120,12 @@ export default class WebGl {
     for (let i in objects) {
       const objectText = await this.loadObject(objects[i].name)
       const objectVertices = this.objectTextToVertices(objectText)
-      let texture = await this.initTexture(objects[i].textureName)
-
-        this.displayedObjects[objects[i].name] = {
-          mvMatrix: mat4.create(),
-          vertices: objectVertices,
-          texture
-        }
+      let textures = await Promise.all(objects[i].textureName.map(textureName => this.initTexture(textureName)))
+      this.displayedObjects[objects[i].name] = {
+        mvMatrix: mat4.create(),
+        vertices: objectVertices,
+        textures
+      }
 
       allVertices = allVertices.concat(objectVertices)
     }
@@ -160,12 +163,13 @@ export default class WebGl {
     this.webGl.useProgram(this.currentProgram)
 
     for (let objectName in this.displayedObjects) {
+      const texturesCount = this.displayedObjects[objectName].textures.length
       this.webGl.activeTexture(this.webGl.TEXTURE0)
-      this.webGl.bindTexture(this.webGl.TEXTURE_2D, this.displayedObjects[objectName].texture)
+      this.webGl.bindTexture(this.webGl.TEXTURE_2D, this.displayedObjects[objectName].textures[Math.floor(Math.random() * (texturesCount))])
       this.webGl.uniform1i(this.currentProgram.samplerUniform, 0)
 
       this.webGl.uniform1i(this.currentProgram.useLightingUniform, true)
-      this.webGl.uniform3f(this.currentProgram.ambientColorUniform, 0.1, 0.1, 0.1)
+      this.webGl.uniform3f(this.currentProgram.ambientColorUniform, 0.3, 0.3, 0.3)
       this.webGl.uniform3f(this.currentProgram.pointLightingLocationUniform, -1, 1, 1)
       this.webGl.uniform3f(this.currentProgram.pointLightingColorUniform, 0.9, 0.9, 0.9)
       this.drawSomeBitch(this.displayedObjects[objectName])
@@ -181,6 +185,8 @@ export default class WebGl {
       this.setMatrix3(mvMatrix)
     } else if (bitch === this.displayedObjects['light1']) {
       this.setMatrixLight(mvMatrix)
+    } else if (bitch === this.displayedObjects['new_cube']) {
+      this.setMatrix4(mvMatrix)
     } else {
       this.setMatrix(mvMatrix)
     }
@@ -238,6 +244,15 @@ export default class WebGl {
     mat4.rotate(matrix, this.degToRad(-this.pitch), [1, 0, 0])
     mat4.rotate(matrix, this.degToRad(-this.yaw), [0, 1, 0])
     mat4.translate(matrix, [-0.5, 0.5, 1.5])
+    mat4.translate(matrix, [-this.xPos, -this.yPos, -this.zPos])
+    mat4.rotate(matrix, this.degToRad(this.rCubeSec), [1, 0, 0])
+  }
+
+  setMatrix4 (matrix) {
+    mat4.identity(matrix)
+    mat4.rotate(matrix, this.degToRad(-this.pitch), [1, 0, 0])
+    mat4.rotate(matrix, this.degToRad(-this.yaw), [0, 1, 0])
+    mat4.translate(matrix, [4.7, 0.1, 2.43])
     mat4.translate(matrix, [-this.xPos, -this.yPos, -this.zPos])
     mat4.rotate(matrix, this.degToRad(this.rCubeSec), [1, 0, 0])
   }
