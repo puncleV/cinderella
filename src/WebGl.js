@@ -9,8 +9,8 @@ const objects = [{
   name: 'cube_sec',
   textureName: ['./cube_sec.gif']
 }, {
-  name: 'wallpaper',
-  textureName: ['./wallpaper.gif']
+  name: 'maze',
+  textureName: ['./textures/wallpaper.gif']
 }, {
   name: 'ceiling',
   textureName: ['./ceiling.gif']
